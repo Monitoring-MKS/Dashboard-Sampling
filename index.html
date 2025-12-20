@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Picking Scanner Mobile</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', sans-serif; }
+        body { background-color: #f4f7f6; display: flex; height: 100vh; overflow: hidden; }
+        
+        .sidebar { width: 60px; background: #2c3e50; color: white; display: flex; flex-direction: column; position: fixed; height: 100%; z-index: 100; }
+        .menu-item { padding: 20px 0; text-align: center; cursor: pointer; color: #bdc3c7; border: none; background: none; width: 100%; font-size: 1.2rem; }
+        .menu-item.active { background: #1a252f; color: #3498db; border-left: 3px solid #3498db; }
+
+        .main-content { margin-left: 60px; flex: 1; display: flex; flex-direction: column; width: calc(100% - 60px); }
+        header { background: white; padding: 10px 15px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        header h2 { font-size: 1rem; color: #2c3e50; }
+
+        .container { padding: 12px; overflow-y: auto; flex: 1; }
+        .card { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 1px 5px rgba(0,0,0,0.05); margin-bottom: 15px; }
+
+        .form-grid { display: flex; flex-direction: column; gap: 10px; }
+        label { font-weight: bold; font-size: 0.75rem; color: #666; text-transform: uppercase; }
+        input, select { padding: 12px; border-radius: 6px; border: 1px solid #ddd; font-size: 0.9rem; width: 100%; }
+        input[readonly] { background: #f9f9f9; color: #777; }
+        
+        .btn { padding: 12px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; }
+        .btn-save { background: #28a745; color: white; width: 100%; margin-top: 10px; }
+        .btn-cam { background: #34495e; color: white; width: 50px; border: none; border-radius: 6px; cursor: pointer; }
+
+        #reader { width: 100%; background: #000; border-radius: 8px; overflow: hidden; margin-bottom: 10px; display: none; }
+
+        .table-wrapper { overflow-x: auto; margin-top: 10px; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.7rem; white-space: nowrap; }
+        table th { background: #f8f9fa; padding: 8px; text-align: left; border-bottom: 2px solid #eee; }
+        table td { padding: 8px; border-bottom: 1px solid #eee; }
+        .badge { padding: 2px 5px; border-radius: 3px; font-weight: bold; }
+        .bg-success { background: #d4edda; color: #155724; }
+        .bg-danger { background: #f8d7da; color: #721c24; }
+
+        .hidden { display: none !important; }
+        #loading { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.9); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 1000; }
+    </style>
+</head>
+<body>
+
+    <div id="loading" class="hidden"><i class="fas fa-sync fa-spin fa-2x"></i><p>Sinkronisasi...</p></div>
+
+    <div class="sidebar">
+        <button class="menu-item active" onclick="showSection('sampling')"><i class="fas fa-qrcode"></i></button>
+        <button class="menu-item" onclick="showSection('report')"><i class="fas fa-history"></i></button>
+    </div>
+
+    <div class="main-content">
+        <header>
+            <h2 id="title">Sampling Scanner</h2>
+            <button onclick="fetchData()" style="border:none; background:none; color:#007bff; cursor: pointer;"><i class="fas fa-sync-alt"></i></button>
+        </header>
+
+        <div class="container">
+            <div id="sectionSampling" class="card">
+                <div id="reader"></div>
+                
+                <div class="form-grid">
+                    <div><label>Petugas</label><input type="text" id="petugas" placeholder="Nama"></div>
+                    <div><label>Tgl Proses</label><select id="tglProses" onchange="resetForm()"><option value="">-- Pilih --</option></select></div>
+                    <div>
+                        <label>Kode Store</label>
+                        <div style="display: flex; gap: 5px;">
+                            <input type="text" id="kdStore" oninput="lookup()" placeholder="Scan/Ketik">
+                            <button class="btn-cam" onclick="toggleScanner()"><i class="fas fa-camera"></i></button>
+                        </div>
+                    </div>
+                    <div><label>No Kontainer</label><select id="selectKon" onchange="getQty()"><option value="">-- Pilih --</option></select></div>
+                    <div><label>Nama Store</label><input type="text" id="namaStore" readonly></div>
+                    <div style="display: flex; gap: 10px;">
+                        <div style="flex:1"><label>Sistem</label><input type="number" id="qtySist" readonly></div>
+                        <div style="flex:1"><label>Fisik</label><input type="number" id="qtyFisik" inputmode="numeric"></div>
+                    </div>
+                </div>
+                <button class="btn btn-save" onclick="simpan()"><i class="fas fa-check-circle"></i> SIMPAN DATA</button>
+            </div>
+
+            <div id="sectionReport" class="card hidden">
+                <div class="table-wrapper">
+                    <table id="tableReport">
+                        <thead><tr><th>Jam</th><th>Tgl</th><th>Petugas</th><th>Toko</th><th>Kon</th><th>Sist</th><th>Fisik</th><th>+/-</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyd8Zd5wQNwGDxipvP5TIMzcs2sFujgLfnH6Bo373-CpHs8vdNfeRXnf42rTeLg0Zk/exec"; 
+        let master = [];
+        let html5QrCode;
+
+        window.onload = fetchData;
+
+        async function fetchData() {
+            document.getElementById('loading').classList.remove('hidden');
+            try {
+                const res = await fetch(SCRIPT_URL);
+                const data = await res.json();
+                master = data.master || [];
+                const sel = document.getElementById('tglProses');
+                const dates = [...new Set(master.map(i => i.TGL_PROSES))];
+                sel.innerHTML = '<option value="">-- Pilih --</option>';
+                dates.forEach(d => sel.innerHTML += `<option value="${d}">${d}</option>`);
+                renderReport(data.reports || []);
+            } catch (e) { alert("Gagal mengambil data!"); }
+            document.getElementById('loading').classList.add('hidden');
+        }
+
+        async function toggleScanner() {
+            const readerDiv = document.getElementById('reader');
+            
+            if (readerDiv.style.display === 'block') {
+                stopScanner();
+                return;
+            }
+
+            readerDiv.style.display = 'block';
+
+            if (!html5QrCode) {
+                html5QrCode = new Html5Qrcode("reader");
+            }
+
+            const config = { 
+                fps: 10, 
+                qrbox: { width: 250, height: 150 },
+                aspectRatio: 1.0
+            };
+
+            try {
+                await html5QrCode.start(
+                    { facingMode: "environment" }, 
+                    config,
+                    (text) => {
+                        const rawText = text.trim().toUpperCase();
+                        // Format: -K0001-R860
+                        if (rawText.includes("-")) {
+                            const bagian = rawText.split("-"); 
+                            const noKonHasil = bagian[1] ? bagian[1].trim() : "";
+                            const kdStoreHasil = bagian[2] ? bagian[2].trim() : "";
+
+                            if (kdStoreHasil) {
+                                document.getElementById('kdStore').value = kdStoreHasil;
+                                lookup(); 
+                                setTimeout(() => {
+                                    const selectKon = document.getElementById('selectKon');
+                                    selectKon.value = noKonHasil;
+                                    if (selectKon.value === noKonHasil) getQty();
+                                }, 600);
+                            }
+                        } else {
+                            document.getElementById('kdStore').value = rawText;
+                            lookup();
+                        }
+                        stopScanner();
+                    }
+                );
+            } catch (err) {
+                alert("Kamera Error: Pastikan menggunakan HTTPS dan berikan izin kamera.");
+                readerDiv.style.display = 'none';
+            }
+        }
+
+        function stopScanner() {
+            if (html5QrCode && html5QrCode.isScanning) {
+                html5QrCode.stop().then(() => {
+                    document.getElementById('reader').style.display = 'none';
+                }).catch(err => console.log("Gagal stop:", err));
+            } else {
+                document.getElementById('reader').style.display = 'none';
+            }
+        }
+
+        function lookup() {
+            const tgl = document.getElementById('tglProses').value;
+            const kd = document.getElementById('kdStore').value.toUpperCase().trim();
+            const matches = master.filter(i => i.TGL_PROSES == tgl && i.KD_STORE == kd);
+            const selKon = document.getElementById('selectKon');
+            if(matches.length > 0) {
+                document.getElementById('namaStore').value = matches[0].NAMA_STORE;
+                selKon.innerHTML = '<option value="">-- Pilih --</option>';
+                const uniqueKons = [...new Set(matches.map(i => i.KONTAINER))];
+                uniqueKons.forEach(c => selKon.innerHTML += `<option value="${c}">${c}</option>`);
+            }
+        }
+
+        function getQty() {
+            const tgl = document.getElementById('tglProses').value;
+            const kd = document.getElementById('kdStore').value.toUpperCase().trim();
+            const kon = document.getElementById('selectKon').value;
+            const match = master.find(i => i.TGL_PROSES == tgl && i.KD_STORE == kd && i.KONTAINER == kon);
+            document.getElementById('qtySist').value = match ? match.TOTAL_QTY_SHIPPING : 0;
+        }
+
+        async function simpan() {
+            const tgl = document.getElementById('tglProses').value;
+            const petugas = document.getElementById('petugas').value;
+            const kd = document.getElementById('kdStore').value.toUpperCase();
+            const kon = document.getElementById('selectKon').value;
+            const qSist = parseInt(document.getElementById('qtySist').value) || 0;
+            const qFisik = parseInt(document.getElementById('qtyFisik').value);
+
+            if(!tgl || !kd || !kon || isNaN(qFisik)) return alert("Isi lengkap!");
+
+            const payload = {
+                tglProses: tgl,
+                petugas: petugas,
+                kode: kd,
+                nama: document.getElementById('namaStore').value,
+                kontainer: kon,
+                sistem: qSist,
+                fisik: qFisik,
+                selisih: qFisik - qSist
+            };
+
+            if(payload.selisih !== 0) alert("⚠️ Selisih ditemukan! Cek kembali fisik barang.");
+
+            document.getElementById('loading').classList.remove('hidden');
+            try {
+                const response = await fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify(payload) });
+                if (response.ok) {
+                    alert("Data Berhasil Disimpan!");
+                    location.reload();
+                }
+            } catch (e) {
+                alert("Gagal mengirim data!");
+                document.getElementById('loading').classList.add('hidden');
+            }
+        }
+
+        function renderReport(data) {
+            const tbody = document.querySelector("#tableReport tbody");
+            tbody.innerHTML = "";
+            data.slice().reverse().slice(0,15).forEach(r => {
+                const jam = new Date(r[0]);
+                const d = r[7];
+                tbody.innerHTML += `<tr>
+                    <td>${jam.getHours().toString().padStart(2, '0')}:${jam.getMinutes().toString().padStart(2, '0')}</td>
+                    <td>${r[8]||'-'}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[4]}</td><td>${r[5]}</td><td>${r[6]}</td>
+                    <td><span class="badge ${d==0?'bg-success':'bg-danger'}">${d}</span></td>
+                </tr>`;
+            });
+        }
+
+        function showSection(id) {
+            document.getElementById('sectionSampling').classList.toggle('hidden', id !== 'sampling');
+            document.getElementById('sectionReport').classList.toggle('hidden', id !== 'report');
+            document.querySelectorAll('.menu-item').forEach(m => m.classList.remove('active'));
+            const activeMenu = document.querySelector(`.menu-item i.fa-${id === 'sampling' ? 'qrcode' : 'history'}`).parentElement;
+            activeMenu.classList.add('active');
+        }
+
+        function resetForm() {
+            document.getElementById('kdStore').value = "";
+            document.getElementById('namaStore').value = "";
+            document.getElementById('qtySist').value = "";
+            document.getElementById('qtyFisik').value = "";
+            document.getElementById('selectKon').innerHTML = '<option value="">-- Pilih --</option>';
+        }
+    </script>
+</body>
+</html>
