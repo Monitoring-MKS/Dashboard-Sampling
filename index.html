@@ -2,269 +2,325 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Picking Scanner Mobile</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitoring Dashboard - Final Update</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', sans-serif; }
-        body { background-color: #f4f7f6; display: flex; height: 100vh; overflow: hidden; }
+        :root { --primary: #2c3e50; --accent: #3498db; --danger: #e74c3c; --success: #27ae60; --warning: #f39c12; }
+        body { font-family: 'Segoe UI', sans-serif; background: #f4f7f6; margin: 0; padding: 10px; color: #333; }
         
-        .sidebar { width: 60px; background: #2c3e50; color: white; display: flex; flex-direction: column; position: fixed; height: 100%; z-index: 100; }
-        .menu-item { padding: 20px 0; text-align: center; cursor: pointer; color: #bdc3c7; border: none; background: none; width: 100%; font-size: 1.2rem; }
-        .menu-item.active { background: #1a252f; color: #3498db; border-left: 3px solid #3498db; }
-
-        .main-content { margin-left: 60px; flex: 1; display: flex; flex-direction: column; width: calc(100% - 60px); }
-        header { background: white; padding: 10px 15px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        header h2 { font-size: 1rem; color: #2c3e50; }
-
-        .container { padding: 12px; overflow-y: auto; flex: 1; }
-        .card { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 1px 5px rgba(0,0,0,0.05); margin-bottom: 15px; }
-
-        .form-grid { display: flex; flex-direction: column; gap: 10px; }
-        label { font-weight: bold; font-size: 0.75rem; color: #666; text-transform: uppercase; }
-        input, select { padding: 12px; border-radius: 6px; border: 1px solid #ddd; font-size: 0.9rem; width: 100%; }
-        input[readonly] { background: #f9f9f9; color: #777; }
+        /* Filter Nav */
+        .filter-nav { background: white; padding: 12px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 15px; display: flex; flex-direction: column; gap: 10px; position: sticky; top: 0; z-index: 1000; }
+        .filter-nav select { padding: 10px; border-radius: 5px; border: 1px solid #ddd; width: 100%; font-size: 1rem; font-weight: bold; }
         
-        .btn { padding: 12px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; }
-        .btn-save { background: #28a745; color: white; width: 100%; margin-top: 10px; }
-        .btn-cam { background: #34495e; color: white; width: 50px; border: none; border-radius: 6px; cursor: pointer; }
+        .card { background: white; padding: 15px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .card h3 { margin-top: 0; color: var(--primary); border-bottom: 2px solid #eee; padding-bottom: 10px; font-size: 0.95rem; text-transform: uppercase; }
+        
+        /* Stat Card Ringkasan */
+        .summary-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        .stat-card { background: white; padding: 20px; border-radius: 12px; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #eee; transition: transform 0.2s; }
+        .stat-card:hover { transform: translateY(-5px); }
+        .stat-card .label { display: block; font-size: 0.85rem; font-weight: bold; color: #666; text-transform: uppercase; margin-bottom: 8px; }
+        .stat-card .value { display: block; font-size: 2.8rem; font-weight: 800; line-height: 1; }
+        .stat-wajib { border-top: 5px solid var(--primary); }
+        .stat-wajib .value { color: var(--primary); }
+        .stat-done { border-top: 5px solid var(--success); }
+        .stat-done .value { color: var(--success); }
+        .stat-pending { border-top: 5px solid var(--danger); }
+        .stat-pending .value { color: var(--danger); }
 
-        #reader { width: 100%; background: #000; border-radius: 8px; overflow: hidden; margin-bottom: 10px; display: none; }
+        /* NO 2 STYLE */
+        #tableTemuan { border-collapse: separate; border-spacing: 0 8px; background: transparent; }
+        #tableTemuan thead th { background-color: #f8fafc; color: #64748b; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em; border-top: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0; padding: 12px; }
+        #tableTemuan tbody tr { background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.02); transition: all 0.2s; }
+        #tableTemuan tbody tr:hover { transform: scale(1.01); box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        #tableTemuan td { padding: 15px 12px; border: none; }
+        #tableTemuan td:first-child { border-radius: 8px 0 0 8px; font-weight: 600; color: var(--primary); }
+        #tableTemuan td:last-child { border-radius: 0 8px 8px 0; }
+        .pct-badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.7rem; font-weight: bold; margin-left: 5px; }
+        .pct-selisih { background: #fee2e2; color: #b91c1c; }
 
-        .table-wrapper { overflow-x: auto; margin-top: 10px; }
-        table { width: 100%; border-collapse: collapse; font-size: 0.7rem; white-space: nowrap; }
-        table th { background: #f8f9fa; padding: 8px; text-align: left; border-bottom: 2px solid #eee; }
-        table td { padding: 8px; border-bottom: 1px solid #eee; }
-        .badge { padding: 2px 5px; border-radius: 3px; font-weight: bold; }
-        .bg-success { background: #d4edda; color: #155724; }
-        .bg-danger { background: #f8d7da; color: #721c24; }
+        .table-wrapper { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #eee; }
+        th { background: #fafafa; position: sticky; top: 0; }
+        .badge { padding: 4px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: bold; }
+        .badge-red { background: #fdecea; color: var(--danger); }
+        .badge-green { background: #eafaf1; color: var(--success); }
+        .loading { text-align: center; padding: 50px; font-weight: bold; }
+        
+        /* NO 3 SPECIFIC STYLE */
+        .petugas-header { padding: 12px; border-radius: 8px; font-weight: bold; font-size: 0.85rem; margin: 15px 0 10px 0; display: flex; justify-content: space-between; align-items: center; }
+        .count-pill { background: white; padding: 2px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 800; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
 
-        .hidden { display: none !important; }
-        #loading { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.9); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 1000; }
+        .kon-list { font-size: 0.85rem; font-weight: bold; color: var(--danger); margin-top: 5px; display: block; }
+        .detail-sisa { display: none; margin-top: 10px; }
+        .btn-toggle { background: #f8f9fa; border: 1px solid #ddd; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 0.75rem; font-weight: bold; color: var(--primary); }
+        @media (min-width: 768px) { .filter-nav { flex-direction: row; } .filter-nav select { width: auto; } body { padding: 20px; } }
     </style>
 </head>
 <body>
 
-    <div id="loading" class="hidden"><i class="fas fa-sync fa-spin fa-2x"></i><p>Sinkronisasi...</p></div>
+    <div id="loader" class="loading"><i class="fas fa-spinner fa-spin"></i> Memuat Data Dashboard...</div>
 
-    <div class="sidebar">
-        <button class="menu-item active" onclick="showSection('sampling')"><i class="fas fa-qrcode"></i></button>
-        <button class="menu-item" onclick="showSection('report')"><i class="fas fa-history"></i></button>
-    </div>
+    <div id="content" style="display:none;">
+        <div class="filter-nav">
+            <label style="font-size: 0.8rem; font-weight: bold; display: flex; align-items: center;"><i class="fas fa-calendar-alt" style="margin-right:8px;"></i> FILTER TANGGAL PROSES:</label>
+            <select id="globalFilterTgl" onchange="updateDashboard()"></select>
+            <button onclick="location.reload()" style="margin-left:auto; padding:10px 15px; cursor:pointer; background: var(--primary); color: white; border: none; border-radius: 5px;"><i class="fas fa-sync"></i> Refresh Data</button>
+        </div>
 
-    <div class="main-content">
-        <header>
-            <h2 id="title">Sampling Scanner</h2>
-            <button onclick="fetchData()" style="border:none; background:none; color:#007bff; cursor: pointer;"><i class="fas fa-sync-alt"></i></button>
-        </header>
-
-        <div class="container">
-            <div id="sectionSampling" class="card">
-                <div id="reader"></div>
-                
-                <div class="form-grid">
-                    <div><label>Petugas</label><input type="text" id="petugas" placeholder="Nama"></div>
-                    <div><label>Tgl Proses</label><select id="tglProses" onchange="resetForm()"><option value="">-- Pilih --</option></select></div>
-                    <div>
-                        <label>Kode Store</label>
-                        <div style="display: flex; gap: 5px;">
-                            <input type="text" id="kdStore" oninput="lookup()" placeholder="Scan/Ketik">
-                            <button class="btn-cam" onclick="toggleScanner()"><i class="fas fa-camera"></i></button>
-                        </div>
-                    </div>
-                    <div><label>No Kontainer</label><select id="selectKon" onchange="getQty()"><option value="">-- Pilih --</option></select></div>
-                    <div><label>Nama Store</label><input type="text" id="namaStore" readonly></div>
-                    <div style="display: flex; gap: 10px;">
-                        <div style="flex:1"><label>Sistem</label><input type="number" id="qtySist" readonly></div>
-                        <div style="flex:1"><label>Fisik</label><input type="number" id="qtyFisik" inputmode="numeric"></div>
-                    </div>
-                </div>
-                <button class="btn btn-save" onclick="simpan()"><i class="fas fa-check-circle"></i> SIMPAN DATA</button>
+        <div class="card">
+            <h3>1. Status Toko Wajib Sampling</h3>
+            <div class="summary-container">
+                <div class="stat-card stat-wajib"><span class="label">Total Wajib</span><span id="wTotal" class="value">0</span></div>
+                <div class="stat-card stat-done"><span class="label">Selesai</span><span id="wDone" class="value">0</span></div>
+                <div class="stat-card stat-pending"><span class="label">Belum</span><span id="wPending" class="value">0</span></div>
             </div>
+            <div class="table-wrapper" style="max-height:450px; overflow-y: auto;">
+                <table id="tableWajib">
+                    <thead><tr><th>Informasi Toko</th><th>Monitoring Sisa</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
 
-            <div id="sectionReport" class="card hidden">
-                <div class="table-wrapper">
-                    <table id="tableReport">
-                        <thead><tr><th>Jam</th><th>Tgl</th><th>Petugas</th><th>Toko</th><th>Kon</th><th>Sist</th><th>Fisik</th><th>+/-</th></tr></thead>
+        <div class="card">
+            <h3>2. Temuan Selisih (Seluruh Periode)</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">
+                <div style="height: 350px;"><canvas id="chartTemuan"></canvas></div>
+                <div class="table-wrapper" style="max-height:350px; overflow-y: auto;">
+                    <table id="tableTemuan">
+                        <thead><tr><th>Tgl Proses</th><th>Sampling</th><th>Selisih & %</th></tr></thead>
                         <tbody></tbody>
                     </table>
                 </div>
             </div>
         </div>
+
+        <div class="card">
+            <h3>3. Produktivitas & Shift Petugas</h3>
+            
+            <div class="petugas-header" style="background: #fff5f5; border-left: 5px solid var(--danger);">
+                <span><i class="fas fa-times-circle"></i> BELUM SAMPLING</span>
+                <span id="countBelum" class="count-pill" style="color: var(--danger);">0 Orang</span>
+            </div>
+            <div class="table-wrapper" style="max-height: 300px; overflow-y: auto; margin-bottom: 20px;">
+                <table id="tablePetugasBelum">
+                    <thead><tr><th>Nama Petugas</th><th>NIK</th><th>Shift</th><th>Status</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+
+            <div class="petugas-header" style="background: #f0fdf4; border-left: 5px solid var(--success);">
+                <span><i class="fas fa-check-circle"></i> SUDAH SAMPLING</span>
+                <span id="countSudah" class="count-pill" style="color: var(--success);">0 Orang</span>
+            </div>
+            <div class="table-wrapper" style="max-height: 400px; overflow-y: auto;">
+                <table id="tablePetugasSudah">
+                    <thead><tr><th>Nama Petugas</th><th>Shift</th><th>Toko</th><th>Kontainer</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
     </div>
 
     <script>
-        const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyd8Zd5wQNwGDxipvP5TIMzcs2sFujgLfnH6Bo373-CpHs8vdNfeRXnf42rTeLg0Zk/exec"; 
-        let master = [];
-        let html5QrCode;
+        const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyqVUPM7hS-aH9nr_NHHOSjSEEMwcAS1DClSGRICcl2UZ0nre5_TxIKjw9fbmThJlwS/exec";
+        let rawReports = [], rawPetugas = [], rawWajib = [], rawMaster = [];
+        let myChart;
 
-        window.onload = fetchData;
+        const CATEGORY_WEIGHT = { "P": 100, "S": 200, "M": 300 };
 
-        async function fetchData() {
-            document.getElementById('loading').classList.remove('hidden');
+        window.onload = init;
+
+        async function init() {
             try {
-                const res = await fetch(SCRIPT_URL);
-                const data = await res.json();
-                master = data.master || [];
-                const sel = document.getElementById('tglProses');
-                const dates = [...new Set(master.map(i => i.TGL_PROSES))];
-                sel.innerHTML = '<option value="">-- Pilih --</option>';
-                dates.forEach(d => sel.innerHTML += `<option value="${d}">${d}</option>`);
-                renderReport(data.reports || []);
-            } catch (e) { alert("Gagal mengambil data!"); }
-            document.getElementById('loading').classList.add('hidden');
-        }
-
-        async function toggleScanner() {
-            const readerDiv = document.getElementById('reader');
-            
-            if (readerDiv.style.display === 'block') {
-                stopScanner();
-                return;
-            }
-
-            readerDiv.style.display = 'block';
-
-            if (!html5QrCode) {
-                html5QrCode = new Html5Qrcode("reader");
-            }
-
-            const config = { 
-                fps: 10, 
-                qrbox: { width: 250, height: 150 },
-                aspectRatio: 1.0
-            };
-
-            try {
-                await html5QrCode.start(
-                    { facingMode: "environment" }, 
-                    config,
-                    (text) => {
-                        const rawText = text.trim().toUpperCase();
-                        // Format: -K0001-R860
-                        if (rawText.includes("-")) {
-                            const bagian = rawText.split("-"); 
-                            const noKonHasil = bagian[1] ? bagian[1].trim() : "";
-                            const kdStoreHasil = bagian[2] ? bagian[2].trim() : "";
-
-                            if (kdStoreHasil) {
-                                document.getElementById('kdStore').value = kdStoreHasil;
-                                lookup(); 
-                                setTimeout(() => {
-                                    const selectKon = document.getElementById('selectKon');
-                                    selectKon.value = noKonHasil;
-                                    if (selectKon.value === noKonHasil) getQty();
-                                }, 600);
-                            }
-                        } else {
-                            document.getElementById('kdStore').value = rawText;
-                            lookup();
-                        }
-                        stopScanner();
-                    }
-                );
-            } catch (err) {
-                alert("Kamera Error: Pastikan menggunakan HTTPS dan berikan izin kamera.");
-                readerDiv.style.display = 'none';
-            }
-        }
-
-        function stopScanner() {
-            if (html5QrCode && html5QrCode.isScanning) {
-                html5QrCode.stop().then(() => {
-                    document.getElementById('reader').style.display = 'none';
-                }).catch(err => console.log("Gagal stop:", err));
-            } else {
-                document.getElementById('reader').style.display = 'none';
-            }
-        }
-
-        function lookup() {
-            const tgl = document.getElementById('tglProses').value;
-            const kd = document.getElementById('kdStore').value.toUpperCase().trim();
-            const matches = master.filter(i => i.TGL_PROSES == tgl && i.KD_STORE == kd);
-            const selKon = document.getElementById('selectKon');
-            if(matches.length > 0) {
-                document.getElementById('namaStore').value = matches[0].NAMA_STORE;
-                selKon.innerHTML = '<option value="">-- Pilih --</option>';
-                const uniqueKons = [...new Set(matches.map(i => i.KONTAINER))];
-                uniqueKons.forEach(c => selKon.innerHTML += `<option value="${c}">${c}</option>`);
-            }
-        }
-
-        function getQty() {
-            const tgl = document.getElementById('tglProses').value;
-            const kd = document.getElementById('kdStore').value.toUpperCase().trim();
-            const kon = document.getElementById('selectKon').value;
-            const match = master.find(i => i.TGL_PROSES == tgl && i.KD_STORE == kd && i.KONTAINER == kon);
-            document.getElementById('qtySist').value = match ? match.TOTAL_QTY_SHIPPING : 0;
-        }
-
-        async function simpan() {
-            const tgl = document.getElementById('tglProses').value;
-            const petugas = document.getElementById('petugas').value;
-            const kd = document.getElementById('kdStore').value.toUpperCase();
-            const kon = document.getElementById('selectKon').value;
-            const qSist = parseInt(document.getElementById('qtySist').value) || 0;
-            const qFisik = parseInt(document.getElementById('qtyFisik').value);
-
-            if(!tgl || !kd || !kon || isNaN(qFisik)) return alert("Isi lengkap!");
-
-            const payload = {
-                tglProses: tgl,
-                petugas: petugas,
-                kode: kd,
-                nama: document.getElementById('namaStore').value,
-                kontainer: kon,
-                sistem: qSist,
-                fisik: qFisik,
-                selisih: qFisik - qSist
-            };
-
-            if(payload.selisih !== 0) alert("⚠️ Selisih ditemukan! Cek kembali fisik barang.");
-
-            document.getElementById('loading').classList.remove('hidden');
-            try {
-                const response = await fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify(payload) });
-                if (response.ok) {
-                    alert("Data Berhasil Disimpan!");
-                    location.reload();
-                }
+                const response = await fetch(SCRIPT_URL + "?get=data");
+                const data = await response.json();
+                rawReports = data.reports || [];
+                rawPetugas = data.petugas || [];
+                rawWajib = data.wajibSampling || [];
+                rawMaster = data.master || []; 
+                setupDateFilter();
+                updateDashboard();
+                document.getElementById('loader').style.display = 'none';
+                document.getElementById('content').style.display = 'block';
             } catch (e) {
-                alert("Gagal mengirim data!");
-                document.getElementById('loading').classList.add('hidden');
+                document.getElementById('loader').innerHTML = "Gagal memuat data dari server.";
             }
         }
 
-        function renderReport(data) {
-            const tbody = document.querySelector("#tableReport tbody");
+        function setupDateFilter() {
+            const select = document.getElementById('globalFilterTgl');
+            const dates = [...new Set(rawReports.map(r => r[9]))].filter(Boolean).sort().reverse();
+            select.innerHTML = dates.map(d => `<option value="${d}">${d}</option>`).join('');
+        }
+
+        function updateDashboard() {
+            const selectedTgl = document.getElementById('globalFilterTgl').value;
+            const filteredReports = rawReports.filter(r => r[9] === selectedTgl);
+            renderWajib(filteredReports, selectedTgl);
+            renderTemuan(); 
+            renderPetugas(filteredReports);
+        }
+
+        function renderWajib(reports, tgl) {
+            const tbody = document.querySelector('#tableWajib tbody');
             tbody.innerHTML = "";
-            data.slice().reverse().slice(0,15).forEach(r => {
-                const jam = new Date(r[0]);
-                const d = r[7];
-                tbody.innerHTML += `<tr>
-                    <td>${jam.getHours().toString().padStart(2, '0')}:${jam.getMinutes().toString().padStart(2, '0')}</td>
-                    <td>${r[8]||'-'}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[4]}</td><td>${r[5]}</td><td>${r[6]}</td>
-                    <td><span class="badge ${d==0?'bg-success':'bg-danger'}">${d}</span></td>
+            let wTotal = 0, wDone = 0;
+            const clean = (s) => s ? s.toString().split(' ')[0].trim().toUpperCase() : "";
+            const regexKurungAngka = /\(\d+\)/;
+
+            rawWajib.forEach((w, index) => {
+                const fullText = w.KD_STORE || "";
+                if (!regexKurungAngka.test(fullText)) return;
+                const kdStore = clean(fullText);
+                const masterSchedule = rawMaster.filter(m => clean(m.KD_STORE) === kdStore && String(m.TGL_PROSES) === String(tgl) && /^[KAM]/i.test(m.KONTAINER));
+                
+                if (masterSchedule.length === 0) return;
+                wTotal++;
+                
+                const listWajib = [...new Set(masterSchedule.map(m => m.KONTAINER.trim().toUpperCase()))];
+                const listDone = [...new Set(reports.filter(r => clean(r[3]) === kdStore).map(r => r[5].trim().toUpperCase()))];
+                const listSisa = listWajib.filter(k => !listDone.includes(k));
+                const isDone = listSisa.length === 0;
+                
+                if(isDone) wDone++;
+
+                tbody.innerHTML += `
+                    <tr>
+                        <td style="vertical-align: top; width: 40%;">
+                            <strong>${fullText}</strong><br>
+                            <small>${w.NAMA_STORE || ''}</small><br>
+                            <span class="badge ${isDone ? 'badge-green' : 'badge-red'}">${isDone ? 'COMPLETE' : 'INCOMPLETE'}</span>
+                        </td>
+                        <td>
+                            <div style="display: flex; gap: 10px; background: #f8f9fa; padding: 10px; border-radius: 6px; font-size: 0.75rem; align-items: center; border: 1px solid #eee;">
+                                <div>PICKING: <strong>${listWajib.length}</strong></div>
+                                <div style="color: #3498db;">SAMPLING: <strong>${listDone.length}</strong></div>
+                                <div style="color: #e74c3c;">SISA: <strong>${listSisa.length}</strong></div>
+                                ${!isDone ? `<button id="btn-${index}" class="btn-toggle" onclick="toggleDetail(${index})"><i class="fas fa-eye"></i> Detail Sisa</button>` : ''}
+                            </div>
+                            <div id="detail-${index}" class="detail-sisa">
+                                <div style="background: #fff5f5; padding: 10px; border-radius: 6px; border: 1px solid #feb2b2;">
+                                    <span class="kon-list">${listSisa.join(', ')}</span>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>`;
+            });
+            document.getElementById('wTotal').innerText = wTotal;
+            document.getElementById('wDone').innerText = wDone;
+            document.getElementById('wPending').innerText = wTotal - wDone;
+        }
+
+        function renderTemuan() {
+            const perfMap = {}; const temuanMap = {};
+            rawReports.forEach(r => {
+                const tgl = r[9] || "Unknown";
+                if (!perfMap[tgl]) perfMap[tgl] = { toko: new Set(), kon: 0 };
+                perfMap[tgl].toko.add(r[3]); perfMap[tgl].kon++;
+                if (!temuanMap[tgl]) temuanMap[tgl] = { toko: new Set(), kon: 0 };
+                if (parseInt(r[8]) !== 0) { temuanMap[tgl].toko.add(r[3]); temuanMap[tgl].kon++; }
+            });
+
+            const labels = Object.keys(perfMap).sort().reverse().slice(0, 5).reverse();
+            const dataPersentase = labels.map(l => ((temuanMap[l].kon / perfMap[l].kon) * 100).toFixed(1));
+
+            const ctx = document.getElementById('chartTemuan').getContext('2d');
+            if (myChart) myChart.destroy();
+            myChart = new Chart(ctx, { 
+                type: 'bar', 
+                data: { 
+                    labels: labels, 
+                    datasets: [
+                        { label: 'Sampling (Kon)', data: labels.map(l => perfMap[l].kon), backgroundColor: 'rgba(52, 152, 219, 0.8)', borderRadius: 5, yAxisID: 'y' }, 
+                        { label: 'Selisih (Kon)', data: labels.map(l => temuanMap[l].kon), backgroundColor: 'rgba(231, 76, 60, 0.8)', borderRadius: 5, yAxisID: 'y' },
+                        { label: '% Rasio', data: dataPersentase, type: 'line', borderColor: '#f39c12', borderWidth: 3, tension: 0.4, fill: false, yAxisID: 'y1' }
+                    ] 
+                }, 
+                options: { 
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { position: 'top', labels: { usePointStyle: true, boxWidth: 6 } } },
+                    scales: { y: { beginAtZero: true, grid: { display: false } }, y1: { beginAtZero: true, position: 'right', grid: { drawOnChartArea: false } } }
+                } 
+            });
+
+            document.querySelector('#tableTemuan tbody').innerHTML = labels.slice().reverse().map(l => {
+                const pToko = ((temuanMap[l].toko.size / perfMap[l].toko.size) * 100).toFixed(1);
+                const pKon = ((temuanMap[l].kon / perfMap[l].kon) * 100).toFixed(1);
+                return `<tr>
+                    <td><i class="fas fa-calendar-day" style="color:#94a3b8; margin-right:8px;"></i>${l}</td>
+                    <td><div style="font-weight:bold;">${perfMap[l].toko.size} Toko</div><small>${perfMap[l].kon} Kon</small></td>
+                    <td>
+                        <div><span style="font-weight:bold; color:#e11d48;">${temuanMap[l].toko.size} Toko</span> <span class="pct-badge pct-selisih">${pToko}%</span></div>
+                        <div style="font-size:0.75rem;">${temuanMap[l].kon} Kon <span style="color:#e11d48; font-weight:600;">(${pKon}%)</span></div>
+                    </td>
                 </tr>`;
+            }).join('');
+        }
+
+        // PERBAIKAN LOGIC NO 3
+        function renderPetugas(reports) {
+            const tbodySudah = document.querySelector('#tablePetugasSudah tbody');
+            const tbodyBelum = document.querySelector('#tablePetugasBelum tbody');
+            tbodySudah.innerHTML = ""; tbodyBelum.innerHTML = "";
+            const norm = (n) => n ? n.toString().replace(/^0+/, '') : "";
+            let dataSudah = [], dataBelum = [];
+
+            rawPetugas.forEach(p => {
+                const nikMaster = norm(p.NIK || p.nik);
+                const pRep = reports.filter(r => norm(r[1]) === nikMaster);
+                const shiftRaw = (p.SHIFT || p.shift || "").toString().trim().toUpperCase();
+                
+                if (shiftRaw === "O" || shiftRaw === "C" || shiftRaw === "OFF" || shiftRaw === "CUTI" || shiftRaw === "") return;
+
+                if (pRep.length > 0) {
+                    dataSudah.push({ nama: p.NAMA, nik: p.NIK, shift: p.SHIFT, toko: [...new Set(pRep.map(r => r[3]))].length, total: pRep.length });
+                } else {
+                    dataBelum.push({ nama: p.NAMA, nik: p.NIK, shift: p.SHIFT });
+                }
+            });
+
+            // Update Counter
+            document.getElementById('countBelum').innerText = `${dataBelum.length} Orang`;
+            document.getElementById('countSudah').innerText = `${dataSudah.length} Orang`;
+
+            // Render Belum Sampling
+            dataBelum.sort((a, b) => getShiftWeight(a.shift) - getShiftWeight(b.shift)).forEach(item => {
+                tbodyBelum.innerHTML += `<tr><td><b>${item.nama}</b></td><td>${item.nik}</td><td><span class="badge" style="background:#f1f5f9; color:#475569;">${item.shift}</span></td><td><span class="badge badge-red">MENUNGGU</span></td></tr>`;
+            });
+
+            // Render Sudah Sampling
+            dataSudah.sort((a, b) => a.total - b.total).forEach(item => {
+                const warningStyle = item.total < 5 ? 'color: #e74c3c; font-weight: bold;' : 'font-weight: bold;';
+                tbodySudah.innerHTML += `<tr><td><b>${item.nama}</b><br><small style="color:#64748b;">NIK: ${item.nik}</small></td><td><span class="badge" style="background:#f1f5f9; color:#475569;">${item.shift}</span></td><td>${item.toko}</td><td style="${warningStyle}">${item.total} Kon</td></tr>`;
             });
         }
 
-        function showSection(id) {
-            document.getElementById('sectionSampling').classList.toggle('hidden', id !== 'sampling');
-            document.getElementById('sectionReport').classList.toggle('hidden', id !== 'report');
-            document.querySelectorAll('.menu-item').forEach(m => m.classList.remove('active'));
-            const activeMenu = document.querySelector(`.menu-item i.fa-${id === 'sampling' ? 'qrcode' : 'history'}`).parentElement;
-            activeMenu.classList.add('active');
-        }
+        const getShiftWeight = (shiftStr) => {
+            if (!shiftStr) return 9999;
+            const match = shiftStr.match(/^([A-Z])(\d+)/i);
+            if (match) {
+                const letter = match[1].toUpperCase();
+                const number = parseInt(match[2]);
+                if (CATEGORY_WEIGHT[letter] !== undefined) return CATEGORY_WEIGHT[letter] + number;
+            }
+            return 8000;
+        };
 
-        function resetForm() {
-            document.getElementById('kdStore').value = "";
-            document.getElementById('namaStore').value = "";
-            document.getElementById('qtySist').value = "";
-            document.getElementById('qtyFisik').value = "";
-            document.getElementById('selectKon').innerHTML = '<option value="">-- Pilih --</option>';
+        function toggleDetail(index) {
+            const div = document.getElementById('detail-' + index);
+            const btn = document.getElementById('btn-' + index);
+            if (div.style.display === 'block') {
+                div.style.display = 'none';
+                btn.innerHTML = '<i class="fas fa-eye"></i> Detail Sisa';
+            } else {
+                div.style.display = 'block';
+                btn.innerHTML = '<i class="fas fa-eye-slash"></i> Sembunyi';
+            }
         }
     </script>
 </body>
