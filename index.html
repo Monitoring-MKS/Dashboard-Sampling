@@ -148,7 +148,7 @@
                 document.getElementById('loader').style.display = 'none';
                 document.getElementById('content').style.display = 'block';
             } catch (e) {
-                document.getElementById('loader').innerHTML = "Gagal memuat data dari server.";
+                document.getElementById('loader').innerHTML = "<div style='color:red; padding:20px;'>Gagal memuat data dari server. Pastikan koneksi stabil dan Apps Script sudah di-deploy.</div>";
             }
         }
 
@@ -163,7 +163,7 @@
             const filteredReports = rawReports.filter(r => r[9] === selectedTgl);
             renderWajib(filteredReports, selectedTgl);
             renderTemuan(); 
-            renderPetugas(filteredReports);
+            renderPetugas(filteredReports, selectedTgl);
         }
 
         function renderWajib(reports, tgl) {
@@ -262,29 +262,49 @@
             }).join('');
         }
 
-        // PERBAIKAN LOGIC NO 3
-        function renderPetugas(reports) {
+        // --- REVISI FUNGSI 3 (HEADER ANGKA) ---
+        function renderPetugas(reports, selectedTgl) {
             const tbodySudah = document.querySelector('#tablePetugasSudah tbody');
             const tbodyBelum = document.querySelector('#tablePetugasBelum tbody');
             tbodySudah.innerHTML = ""; tbodyBelum.innerHTML = "";
-            const norm = (n) => n ? n.toString().replace(/^0+/, '') : "";
+
+            const norm = (n) => n ? n.toString().replace(/^0+/, '').trim() : "";
+            
+            // Ambil angka tanggal dari format "01-Dec-25" -> 1
+            const daySelected = parseInt(selectedTgl.split('-')[0]); 
+
             let dataSudah = [], dataBelum = [];
 
             rawPetugas.forEach(p => {
                 const nikMaster = norm(p.NIK || p.nik);
-                const pRep = reports.filter(r => norm(r[1]) === nikMaster);
-                const shiftRaw = (p.SHIFT || p.shift || "").toString().trim().toUpperCase();
+                const namaMaster = p.NAMA || p.nama;
                 
-                if (shiftRaw === "O" || shiftRaw === "C" || shiftRaw === "OFF" || shiftRaw === "CUTI" || shiftRaw === "") return;
+                // Membaca shift dari properti objek sesuai angka tanggal
+                const shiftRaw = (p[daySelected] || "").toString().trim().toUpperCase();
+                
+                // Filter: Lewati jika Libur (O), Cuti (C), Off, atau Kosong
+                if (["O", "C", "OFF", "OFF S3", "CUTI", "LIBUR", ""].includes(shiftRaw)) return;
+
+                const pRep = reports.filter(r => norm(r[1]) === nikMaster);
 
                 if (pRep.length > 0) {
-                    dataSudah.push({ nama: p.NAMA, nik: p.NIK, shift: p.SHIFT, toko: [...new Set(pRep.map(r => r[3]))].length, total: pRep.length });
+                    dataSudah.push({ 
+                        nama: namaMaster, 
+                        nik: p.NIK || p.nik, 
+                        shift: shiftRaw, 
+                        toko: [...new Set(pRep.map(r => r[3]))].length, 
+                        total: pRep.length 
+                    });
                 } else {
-                    dataBelum.push({ nama: p.NAMA, nik: p.NIK, shift: p.SHIFT });
+                    dataBelum.push({ 
+                        nama: namaMaster, 
+                        nik: p.NIK || p.nik, 
+                        shift: shiftRaw 
+                    });
                 }
             });
 
-            // Update Counter
+            // Update Counter UI
             document.getElementById('countBelum').innerText = `${dataBelum.length} Orang`;
             document.getElementById('countSudah').innerText = `${dataSudah.length} Orang`;
 
