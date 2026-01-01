@@ -30,7 +30,6 @@
         .stat-pending { border-top: 5px solid var(--danger); }
         .stat-pending .value { color: var(--danger); }
 
-        /* NO 2 STYLE */
         #tableTemuan { border-collapse: separate; border-spacing: 0 8px; background: transparent; }
         #tableTemuan thead th { background-color: #f8fafc; color: #64748b; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em; border-top: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0; padding: 12px; }
         #tableTemuan tbody tr { background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.02); transition: all 0.2s; }
@@ -50,7 +49,6 @@
         .badge-green { background: #eafaf1; color: var(--success); }
         .loading { text-align: center; padding: 50px; font-weight: bold; }
         
-        /* NO 3 SPECIFIC STYLE */
         .petugas-header { padding: 12px; border-radius: 8px; font-weight: bold; font-size: 0.85rem; margin: 15px 0 10px 0; display: flex; justify-content: space-between; align-items: center; }
         .count-pill { background: white; padding: 2px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 800; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
 
@@ -124,6 +122,29 @@
                 </table>
             </div>
         </div>
+
+        <div class="card">
+            <div class="petugas-header" style="background: #eff6ff; border-left: 5px solid var(--accent); margin: 0; padding: 10px;">
+                <span><i class="fas fa-chart-line"></i> PERFORMANCE ACCUMULATED</span>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <label style="font-size: 0.7rem; font-weight: bold;">SORT BY:</label>
+                    <select id="sortPerformance" onchange="renderPerformanceAccumulated()" style="font-size: 0.75rem; padding: 4px; border-radius: 4px; border: 1px solid #ddd;">
+                        <option value="lastSampling">Tgl Terakhir</option>
+                        <option value="listHari">Freq Hari</option>
+                        <option value="totalKon" selected>Total Kontainer</option>
+                    </select>
+                </div>
+            </div>
+            <div class="table-wrapper" style="max-height: 400px; overflow-y: auto;">
+                <table id="tablePerformanceAcc">
+                    <thead>
+                        <tr><th>Petugas</th><th>Terakhir</th><th>Toko</th><th>Freq</th><th>Total</th></tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
     </div>
 
     <script>
@@ -131,7 +152,7 @@
         let rawReports = [], rawPetugas = [], rawWajib = [], rawMaster = [];
         let myChart;
 
-        const CATEGORY_WEIGHT = { "P": 100, "S": 200, "M": 300 };
+        const CATEGORY_WEIGHT = { "D":0,"P": 100, "S": 200, "M": 300 };
 
         window.onload = init;
 
@@ -148,22 +169,37 @@
                 document.getElementById('loader').style.display = 'none';
                 document.getElementById('content').style.display = 'block';
             } catch (e) {
-                document.getElementById('loader').innerHTML = "<div style='color:red; padding:20px;'>Gagal memuat data dari server. Pastikan koneksi stabil dan Apps Script sudah di-deploy.</div>";
+                document.getElementById('loader').innerHTML = "<div style='color:red; padding:20px;'>Gagal memuat data dari server.</div>";
             }
+        }
+
+        function formatDateDisplay(val) {
+            if (!val) return "";
+            let d = new Date(val);
+            if (!isNaN(d.getTime())) {
+                const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+                const day = d.getDate().toString().padStart(2, '0');
+                const month = months[d.getMonth()];
+                const year = d.getFullYear().toString().slice(-2);
+                return `${day}-${month}-${year}`;
+            }
+            return val.toString().split('T')[0]; 
         }
 
         function setupDateFilter() {
             const select = document.getElementById('globalFilterTgl');
-            const dates = [...new Set(rawReports.map(r => r[9]))].filter(Boolean).sort().reverse();
-            select.innerHTML = dates.map(d => `<option value="${d}">${d}</option>`).join('');
+            const formattedDates = rawReports.map(r => formatDateDisplay(r[9])).filter(Boolean);
+            const uniqueDates = [...new Set(formattedDates)].sort((a, b) => new Date(b) - new Date(a));
+            select.innerHTML = uniqueDates.map(d => `<option value="${d}">${d}</option>`).join('');
         }
 
         function updateDashboard() {
             const selectedTgl = document.getElementById('globalFilterTgl').value;
-            const filteredReports = rawReports.filter(r => r[9] === selectedTgl);
+            const filteredReports = rawReports.filter(r => formatDateDisplay(r[9]) === selectedTgl);
             renderWajib(filteredReports, selectedTgl);
             renderTemuan(); 
             renderPetugas(filteredReports, selectedTgl);
+            renderPerformanceAccumulated();
         }
 
         function renderWajib(reports, tgl) {
@@ -177,39 +213,20 @@
                 const fullText = w.KD_STORE || "";
                 if (!regexKurungAngka.test(fullText)) return;
                 const kdStore = clean(fullText);
-                const masterSchedule = rawMaster.filter(m => clean(m.KD_STORE) === kdStore && String(m.TGL_PROSES) === String(tgl) && /^[KAM]/i.test(m.KONTAINER));
-                
+                const masterSchedule = rawMaster.filter(m => clean(m.KD_STORE) === kdStore && formatDateDisplay(m.TGL_PROSES) === tgl && /^[KAM]/i.test(m.KONTAINER));
                 if (masterSchedule.length === 0) return;
                 wTotal++;
-                
                 const listWajib = [...new Set(masterSchedule.map(m => m.KONTAINER.trim().toUpperCase()))];
                 const listDone = [...new Set(reports.filter(r => clean(r[3]) === kdStore).map(r => r[5].trim().toUpperCase()))];
                 const listSisa = listWajib.filter(k => !listDone.includes(k));
                 const isDone = listSisa.length === 0;
-                
                 if(isDone) wDone++;
 
-                tbody.innerHTML += `
-                    <tr>
-                        <td style="vertical-align: top; width: 40%;">
-                            <strong>${fullText}</strong><br>
-                            <small>${w.NAMA_STORE || ''}</small><br>
-                            <span class="badge ${isDone ? 'badge-green' : 'badge-red'}">${isDone ? 'COMPLETE' : 'INCOMPLETE'}</span>
-                        </td>
-                        <td>
-                            <div style="display: flex; gap: 10px; background: #f8f9fa; padding: 10px; border-radius: 6px; font-size: 0.75rem; align-items: center; border: 1px solid #eee;">
-                                <div>PICKING: <strong>${listWajib.length}</strong></div>
-                                <div style="color: #3498db;">SAMPLING: <strong>${listDone.length}</strong></div>
-                                <div style="color: #e74c3c;">SISA: <strong>${listSisa.length}</strong></div>
-                                ${!isDone ? `<button id="btn-${index}" class="btn-toggle" onclick="toggleDetail(${index})"><i class="fas fa-eye"></i> Detail Sisa</button>` : ''}
-                            </div>
-                            <div id="detail-${index}" class="detail-sisa">
-                                <div style="background: #fff5f5; padding: 10px; border-radius: 6px; border: 1px solid #feb2b2;">
-                                    <span class="kon-list">${listSisa.join(', ')}</span>
-                                </div>
-                            </div>
-                        </td>
-                    </tr>`;
+                tbody.innerHTML += `<tr><td style="vertical-align: top; width: 40%;"><strong>${fullText}</strong><br><small>${w.NAMA_STORE || ''}</small><br><span class="badge ${isDone ? 'badge-green' : 'badge-red'}">${isDone ? 'COMPLETE' : 'INCOMPLETE'}</span></td>
+                    <td><div style="display: flex; gap: 10px; background: #f8f9fa; padding: 10px; border-radius: 6px; font-size: 0.75rem; align-items: center; border: 1px solid #eee;">
+                    <div>PICKING: <strong>${listWajib.length}</strong></div><div style="color: #3498db;">SAMPLING: <strong>${listDone.length}</strong></div><div style="color: #e74c3c;">SISA: <strong>${listSisa.length}</strong></div>
+                    ${!isDone ? `<button id="btn-${index}" class="btn-toggle" onclick="toggleDetail(${index})"><i class="fas fa-eye"></i> Detail Sisa</button>` : ''}</div>
+                    <div id="detail-${index}" class="detail-sisa"><div style="background: #fff5f5; padding: 10px; border-radius: 6px; border: 1px solid #feb2b2;"><span class="kon-list">${listSisa.join(', ')}</span></div></div></td></tr>`;
             });
             document.getElementById('wTotal').innerText = wTotal;
             document.getElementById('wDone').innerText = wDone;
@@ -219,107 +236,129 @@
         function renderTemuan() {
             const perfMap = {}; const temuanMap = {};
             rawReports.forEach(r => {
-                const tgl = r[9] || "Unknown";
+                const tgl = formatDateDisplay(r[9]) || "Unknown";
                 if (!perfMap[tgl]) perfMap[tgl] = { toko: new Set(), kon: 0 };
                 perfMap[tgl].toko.add(r[3]); perfMap[tgl].kon++;
                 if (!temuanMap[tgl]) temuanMap[tgl] = { toko: new Set(), kon: 0 };
                 if (parseInt(r[8]) !== 0) { temuanMap[tgl].toko.add(r[3]); temuanMap[tgl].kon++; }
             });
 
-            const labels = Object.keys(perfMap).sort().reverse().slice(0, 5).reverse();
+            const labels = Object.keys(perfMap).sort((a,b) => new Date(a) - new Date(b)).slice(-5);
             const dataPersentase = labels.map(l => ((temuanMap[l].kon / perfMap[l].kon) * 100).toFixed(1));
 
             const ctx = document.getElementById('chartTemuan').getContext('2d');
             if (myChart) myChart.destroy();
             myChart = new Chart(ctx, { 
-                type: 'bar', 
-                data: { 
-                    labels: labels, 
-                    datasets: [
-                        { label: 'Sampling (Kon)', data: labels.map(l => perfMap[l].kon), backgroundColor: 'rgba(52, 152, 219, 0.8)', borderRadius: 5, yAxisID: 'y' }, 
-                        { label: 'Selisih (Kon)', data: labels.map(l => temuanMap[l].kon), backgroundColor: 'rgba(231, 76, 60, 0.8)', borderRadius: 5, yAxisID: 'y' },
-                        { label: '% Rasio', data: dataPersentase, type: 'line', borderColor: '#f39c12', borderWidth: 3, tension: 0.4, fill: false, yAxisID: 'y1' }
-                    ] 
-                }, 
-                options: { 
-                    responsive: true, maintainAspectRatio: false,
-                    plugins: { legend: { position: 'top', labels: { usePointStyle: true, boxWidth: 6 } } },
-                    scales: { y: { beginAtZero: true, grid: { display: false } }, y1: { beginAtZero: true, position: 'right', grid: { drawOnChartArea: false } } }
-                } 
+                type: 'bar', data: { labels: labels, datasets: [{ label: 'Sampling (Kon)', data: labels.map(l => perfMap[l].kon), backgroundColor: 'rgba(52, 152, 219, 0.8)', borderRadius: 5, yAxisID: 'y' }, { label: 'Selisih (Kon)', data: labels.map(l => temuanMap[l].kon), backgroundColor: 'rgba(231, 76, 60, 0.8)', borderRadius: 5, yAxisID: 'y' }, { label: '% Rasio', data: dataPersentase, type: 'line', borderColor: '#f39c12', borderWidth: 3, tension: 0.4, fill: false, yAxisID: 'y1' }] }, 
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top', labels: { usePointStyle: true, boxWidth: 6 } } }, scales: { y: { beginAtZero: true, grid: { display: false } }, y1: { beginAtZero: true, position: 'right', grid: { drawOnChartArea: false } } } } 
             });
 
             document.querySelector('#tableTemuan tbody').innerHTML = labels.slice().reverse().map(l => {
                 const pToko = ((temuanMap[l].toko.size / perfMap[l].toko.size) * 100).toFixed(1);
                 const pKon = ((temuanMap[l].kon / perfMap[l].kon) * 100).toFixed(1);
-                return `<tr>
-                    <td><i class="fas fa-calendar-day" style="color:#94a3b8; margin-right:8px;"></i>${l}</td>
-                    <td><div style="font-weight:bold;">${perfMap[l].toko.size} Toko</div><small>${perfMap[l].kon} Kon</small></td>
-                    <td>
-                        <div><span style="font-weight:bold; color:#e11d48;">${temuanMap[l].toko.size} Toko</span> <span class="pct-badge pct-selisih">${pToko}%</span></div>
-                        <div style="font-size:0.75rem;">${temuanMap[l].kon} Kon <span style="color:#e11d48; font-weight:600;">(${pKon}%)</span></div>
-                    </td>
-                </tr>`;
+                return `<tr><td><i class="fas fa-calendar-day" style="color:#94a3b8; margin-right:8px;"></i>${l}</td><td><div style="font-weight:bold;">${perfMap[l].toko.size} Toko</div><small>${perfMap[l].kon} Kon</small></td><td><div><span style="font-weight:bold; color:#e11d48;">${temuanMap[l].toko.size} Toko</span> <span class="pct-badge pct-selisih">${pToko}%</span></div><div style="font-size:0.75rem;">${temuanMap[l].kon} Kon <span style="color:#e11d48; font-weight:600;">(${pKon}%)</span></div></td></tr>`;
             }).join('');
         }
 
-        // --- REVISI FUNGSI 3 (HEADER ANGKA) ---
         function renderPetugas(reports, selectedTgl) {
             const tbodySudah = document.querySelector('#tablePetugasSudah tbody');
             const tbodyBelum = document.querySelector('#tablePetugasBelum tbody');
             tbodySudah.innerHTML = ""; tbodyBelum.innerHTML = "";
-
             const norm = (n) => n ? n.toString().replace(/^0+/, '').trim() : "";
-            
-            // Ambil angka tanggal dari format "01-Dec-25" -> 1
             const daySelected = parseInt(selectedTgl.split('-')[0]); 
-
             let dataSudah = [], dataBelum = [];
 
             rawPetugas.forEach(p => {
                 const nikMaster = norm(p.NIK || p.nik);
                 const namaMaster = p.NAMA || p.nama;
-                
-                // Membaca shift dari properti objek sesuai angka tanggal
                 const shiftRaw = (p[daySelected] || "").toString().trim().toUpperCase();
-                
-                // Filter: Lewati jika Libur (O), Cuti (C), Off, atau Kosong
-                if (["O", "C", "OFF", "OFF S3", "CUTI", "LIBUR", ""].includes(shiftRaw)) return;
-
+                if (["O", "C", "OFF", "OFF S3", "CUTI", "LIBUR","L", ""].includes(shiftRaw)) return;
                 const pRep = reports.filter(r => norm(r[1]) === nikMaster);
-
                 if (pRep.length > 0) {
-                    dataSudah.push({ 
-                        nama: namaMaster, 
-                        nik: p.NIK || p.nik, 
-                        shift: shiftRaw, 
-                        toko: [...new Set(pRep.map(r => r[3]))].length, 
-                        total: pRep.length 
-                    });
+                    dataSudah.push({ nama: namaMaster, nik: p.NIK || p.nik, shift: shiftRaw, toko: [...new Set(pRep.map(r => r[3]))].length, total: pRep.length });
                 } else {
-                    dataBelum.push({ 
-                        nama: namaMaster, 
-                        nik: p.NIK || p.nik, 
-                        shift: shiftRaw 
-                    });
+                    dataBelum.push({ nama: namaMaster, nik: p.NIK || p.nik, shift: shiftRaw });
                 }
             });
 
-            // Update Counter UI
             document.getElementById('countBelum').innerText = `${dataBelum.length} Orang`;
             document.getElementById('countSudah').innerText = `${dataSudah.length} Orang`;
 
-            // Render Belum Sampling
             dataBelum.sort((a, b) => getShiftWeight(a.shift) - getShiftWeight(b.shift)).forEach(item => {
-                tbodyBelum.innerHTML += `<tr><td><b>${item.nama}</b></td><td>${item.nik}</td><td><span class="badge" style="background:#f1f5f9; color:#475569;">${item.shift}</span></td><td><span class="badge badge-red">MENUNGGU</span></td></tr>`;
+                tbodyBelum.innerHTML += `<tr><td><b>${item.nama}</b></td><td>${item.nik}</td><td><span class="badge" style="background:#f1f5f9; color:#475569;">${item.shift}</span></td><td><span class="badge badge-red">BELUM</span></td></tr>`;
             });
 
-            // Render Sudah Sampling
             dataSudah.sort((a, b) => a.total - b.total).forEach(item => {
                 const warningStyle = item.total < 5 ? 'color: #e74c3c; font-weight: bold;' : 'font-weight: bold;';
                 tbodySudah.innerHTML += `<tr><td><b>${item.nama}</b><br><small style="color:#64748b;">NIK: ${item.nik}</small></td><td><span class="badge" style="background:#f1f5f9; color:#475569;">${item.shift}</span></td><td>${item.toko}</td><td style="${warningStyle}">${item.total} Kon</td></tr>`;
             });
         }
 
+        // --- PERFORMANCE ACCUMULATED DENGAN SORT ---
+function renderPerformanceAccumulated() {
+    const tbody = document.querySelector('#tablePerformanceAcc tbody');
+    const sortBy = document.getElementById('sortPerformance').value;
+    tbody.innerHTML = "";
+    const perfData = {};
+    const norm = (n) => n ? n.toString().replace(/^0+/, '').trim() : "";
+    
+    // Daftar nama yang dikecualikan (tetap dipertahankan)
+    const excluded = ["BASUKI", "URIP PRADIPTA", "LINGGA", "REZKA"];
+
+    rawReports.forEach(r => {
+        const nik = norm(r[1]);
+        const nama = (r[2] || "").toString().toUpperCase();
+        if (excluded.some(ex => nama.includes(ex))) return;
+
+        if (!perfData[nik]) {
+            perfData[nik] = { 
+                nama: r[2], 
+                lastSampling: r[9], 
+                listToko: new Set(), 
+                listHari: new Set(), 
+                totalKon: 0 
+            };
+        }
+        perfData[nik].listToko.add(r[3]);
+        perfData[nik].listHari.add(formatDateDisplay(r[9]));
+        perfData[nik].totalKon++;
+        
+        // Simpan tanggal terakhir sampling untuk masing-masing petugas
+        if (new Date(r[9]) > new Date(perfData[nik].lastSampling)) {
+            perfData[nik].lastSampling = r[9];
+        }
+    });
+
+    const sortedArray = Object.keys(perfData).map(nik => ({ nik, ...perfData[nik] }));
+    
+    // --- LOGIKA SORTING BARU ---
+    sortedArray.sort((a, b) => {
+        if (sortBy === 'lastSampling') {
+            // Urutan: Paling Lama (Terlawas) ke Terbaru
+            return new Date(a.lastSampling) - new Date(b.lastSampling);
+        }
+        if (sortBy === 'listHari') {
+            // Urutan: Frekuensi Hari Terendah (Sedikit) ke Terbanyak
+            return a.listHari.size - b.listHari.size;
+        }
+        if (sortBy === 'totalKon') {
+            // Urutan: Total Kontainer Terbanyak ke Terkecil
+            return b.totalKon - a.totalKon;
+        }
+        return 0;
+    });
+
+    // Render ke Tabel
+    sortedArray.forEach(item => {
+        tbody.innerHTML += `<tr>
+            <td><b>${item.nama}</b><br><small>NIK: ${item.nik}</small></td>
+            <td>${formatDateDisplay(item.lastSampling)}</td>
+            <td style="text-align:center;">${item.listToko.size}</td>
+            <td style="text-align:center;">${item.listHari.size} H</td>
+            <td style="text-align:right; font-weight:bold;">${item.totalKon} Kon</td>
+        </tr>`;
+    });
+}
         const getShiftWeight = (shiftStr) => {
             if (!shiftStr) return 9999;
             const match = shiftStr.match(/^([A-Z])(\d+)/i);
