@@ -6,6 +6,8 @@
     <title>Dashboard Sampling</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
     <style>
         :root { --primary: #2c3e50; --accent: #3498db; --danger: #e74c3c; --success: #27ae60; --warning: #f39c12; }
         body { font-family: 'Segoe UI', sans-serif; background: #f4f7f6; margin: 0; padding: 10px; color: #333; }
@@ -85,7 +87,9 @@
         </div>
 
         <div class="card">
-            <h3>2. Temuan Selisih (Seluruh Periode)</h3>
+<h3>2. Temuan Selisih (Seluruh Periode) 
+    <button onclick="popExport('temuan')" style="float:right; font-size: 10px; padding: 5px;"><i class="fas fa-file-excel"></i> Export Report Sampling</button>
+</h3>
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">
                 <div style="height: 350px;"><canvas id="chartTemuan"></canvas></div>
                 <div class="table-wrapper" style="max-height:350px; overflow-y: auto;">
@@ -98,8 +102,9 @@
         </div>
 
         <div class="card">
-            <h3>3. Produktivitas & Shift Petugas</h3>
-            
+<h3>3. Produktivitas & Shift Petugas 
+    <button onclick="popExport('produktivitas')" style="float:right; font-size: 10px; padding: 5px;"><i class="fas fa-file-excel"></i> Export Repor Petugas</button>
+</h3>            
             <div class="petugas-header" style="background: #fff5f5; border-left: 5px solid var(--danger);">
                 <span><i class="fas fa-times-circle"></i> BELUM SAMPLING</span>
                 <span id="countBelum" class="count-pill" style="color: var(--danger);">0 Orang</span>
@@ -144,11 +149,10 @@
                 </table>
             </div>
         </div>
-
     </div>
 
     <script>
-        const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyqVUPM7hS-aH9nr_NHHOSjSEEMwcAS1DClSGRICcl2UZ0nre5_TxIKjw9fbmThJlwS/exec";
+        const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzRjYOyBYDqCKLgb_2gyLHEk6vbikUppPPNc_w7v5A52V55GtzDHQIm52QwrPdwFeVe/exec";
         let rawReports = [], rawPetugas = [], rawWajib = [], rawMaster = [];
         let myChart;
 
@@ -194,71 +198,275 @@
         }
 
         function updateDashboard() {
-            const selectedTgl = document.getElementById('globalFilterTgl').value;
-            const filteredReports = rawReports.filter(r => formatDateDisplay(r[9]) === selectedTgl);
-            renderWajib(filteredReports, selectedTgl);
-            renderTemuan(); 
-            renderPetugas(filteredReports, selectedTgl);
-            renderPerformanceAccumulated();
+    const selectedTgl = document.getElementById('globalFilterTgl').value;
+    const filteredReports = rawReports.filter(r => formatDateDisplay(r[9]) === selectedTgl);
+    
+    // Pastikan renderWajib dipanggil dengan data terfilter dan tanggal terpilih
+    renderWajib(filteredReports, selectedTgl); 
+    
+    renderTemuan(); 
+    renderPetugas(filteredReports, selectedTgl);
+    renderPerformanceAccumulated();
+}
+
+function renderWajib(reports, tgl) {
+    const tbody = document.querySelector('#tableWajib tbody');
+    tbody.innerHTML = "";
+    let wTotal = 0, wDone = 0;
+    
+    const clean = (s) => s ? s.toString().trim().toUpperCase() : "";
+    
+    // Helper untuk mengambil nilai objek (MasterData) dengan kunci fleksibel
+    const getVal = (obj, key) => {
+        const altKey = key.replace(/ /g, '_'); 
+        return obj[key] || obj[altKey] || obj[key.toUpperCase()] || obj[altKey.toUpperCase()] || "";
+    };
+
+    // 1. Cari Index Kolom Tanggal di Header Wajib Sampling
+    const headers = rawWajib[0];
+    const colIdxTgl = headers.findIndex(h => clean(h) === clean(tgl));
+
+    if (colIdxTgl === -1) {
+        tbody.innerHTML = `<tr><td colspan="2" style="text-align:center; padding:20px; color:red;">Kolom Tanggal "${tgl}" Tidak Ditemukan</td></tr>`;
+        return;
+    }
+
+    // 2. Olah Data Toko
+    rawWajib.slice(1).forEach((row, idx) => {
+        const keterangan = clean(row[4]); // Kolom E: Keterangan
+        const urpickTarget = parseInt(row[colIdxTgl]) || 0;
+
+        // Filter: Hanya yang memiliki keterangan "FREKUENSI BTA BK" dan target > 0
+        if (keterangan.includes("FREKUENSI BTA BK") && urpickTarget > 0) {
+            const kdStore = clean(row[0]);
+            
+            // A. Ambil Kontainer Picking dari MasterData (DISARING BERDASARKAN TANGGAL PROSES)
+            const allKonPicking = rawMaster.filter(m => {
+                const mStore = clean(getVal(m, "KD STORE"));
+                const mTgl = formatDateDisplay(getVal(m, "TGL PROSES")); // Filter Tanggal Master
+                const mKon = clean(getVal(m, "NO KONTAINER") || getVal(m, "KONTAINER"));
+                
+                // Cek: Kode Toko Cocok DAN Tanggal Proses Cocok dengan Filter Dashboard
+                if (mStore !== kdStore || mTgl !== tgl) return false;
+                
+                // Filter kriteria kontainer (K, M, atau A > A0001)
+                const awal = mKon.charAt(0);
+                if (awal === 'K' || awal === 'M') return true;
+                if (awal === 'A') {
+                    const angka = parseInt(mKon.replace('A', '')) || 0;
+                    return angka > 1;
+                }
+                return false;
+            }).map(m => clean(getVal(m, "NO KONTAINER") || getVal(m, "KONTAINER")));
+
+            const uniquePicking = [...new Set(allKonPicking)];
+            
+            // B. Ambil yang Sudah Sampling (dari HasilSampling/reports)
+            const listDone = [...new Set(reports
+                .filter(r => clean(r[3]) === kdStore)
+                .map(r => clean(r[5])))];
+            
+            // C. Hitung Sisa
+            const listBelum = uniquePicking.filter(kon => !listDone.includes(kon));
+            const sisa = listBelum.length;
+            
+            // Status Complete: Sisa 0 dan sudah ada aktivitas sampling
+            const isDone = sisa === 0 && listDone.length > 0;
+
+            wTotal++;
+            if (isDone) wDone++;
+
+            // D. Render Baris Tabel
+            tbody.innerHTML += `
+                <tr>
+                    <td style="vertical-align: top; width: 40%;">
+                        <strong>${row[0]} Urpick ${urpickTarget}</strong><br>
+                        <small style="color:#64748b;">${row[1]}</small><br>
+                        <span class="badge ${isDone ? 'badge-green' : 'badge-red'}">
+                            ${isDone ? 'COMPLETE' : 'INCOMPLETE'}
+                        </span>
+                    </td>
+                    <td>
+                        <div style="display: flex; gap: 10px; background: #f8f9fa; padding: 10px; border-radius: 6px; font-size: 0.75rem; align-items: center; border: 1px solid #eee;">
+                            <div>PICKING: <strong>${uniquePicking.length}</strong></div>
+                            <div style="color: #3498db;">SAMPLING: <strong>${listDone.length}</strong></div>
+                            <div style="color: #e74c3c;">SISA: <strong>${sisa}</strong></div>
+                            ${sisa > 0 ? `
+                                <button class="btn-toggle" onclick="toggleWajibDetail(${idx})">
+                                    <i class="fas fa-eye"></i> Detail Sisa
+                                </button>
+                            ` : ''}
+                        </div>
+                        <div id="detail-wajib-${idx}" class="detail-sisa" style="display:none; margin-top:10px; padding:10px; background:#fff5f5; border:1px solid #feb2b2; border-radius:6px;">
+                            <small><b>KONTAINER BELUM SAMPLING:</b></small><br>
+                            <span style="color:#e74c3c; font-weight:bold; font-size:0.85rem;">
+                                ${listBelum.length > 0 ? listBelum.join(', ') : 'Tidak ada sisa kontainer'}
+                            </span>
+                        </div>
+                    </td>
+                </tr>`;
         }
+    });
 
-        function renderWajib(reports, tgl) {
-            const tbody = document.querySelector('#tableWajib tbody');
-            tbody.innerHTML = "";
-            let wTotal = 0, wDone = 0;
-            const clean = (s) => s ? s.toString().split(' ')[0].trim().toUpperCase() : "";
-            const regexKurungAngka = /\(\d+\)/;
+    document.getElementById('wTotal').innerText = wTotal;
+    document.getElementById('wDone').innerText = wDone;
+    document.getElementById('wPending').innerText = wTotal - wDone;
+}
 
-            rawWajib.forEach((w, index) => {
-                const fullText = w.KD_STORE || "";
-                if (!regexKurungAngka.test(fullText)) return;
-                const kdStore = clean(fullText);
-                const masterSchedule = rawMaster.filter(m => clean(m.KD_STORE) === kdStore && formatDateDisplay(m.TGL_PROSES) === tgl && /^[KAM]/i.test(m.KONTAINER));
-                if (masterSchedule.length === 0) return;
-                wTotal++;
-                const listWajib = [...new Set(masterSchedule.map(m => m.KONTAINER.trim().toUpperCase()))];
-                const listDone = [...new Set(reports.filter(r => clean(r[3]) === kdStore).map(r => r[5].trim().toUpperCase()))];
-                const listSisa = listWajib.filter(k => !listDone.includes(k));
-                const isDone = listSisa.length === 0;
-                if(isDone) wDone++;
+function toggleWajibDetail(idx) {
+    const div = document.getElementById('detail-wajib-' + idx);
+    if (div) {
+        div.style.display = div.style.display === 'none' ? 'block' : 'none';
+    }
+}
 
-                tbody.innerHTML += `<tr><td style="vertical-align: top; width: 40%;"><strong>${fullText}</strong><br><small>${w.NAMA_STORE || ''}</small><br><span class="badge ${isDone ? 'badge-green' : 'badge-red'}">${isDone ? 'COMPLETE' : 'INCOMPLETE'}</span></td>
-                    <td><div style="display: flex; gap: 10px; background: #f8f9fa; padding: 10px; border-radius: 6px; font-size: 0.75rem; align-items: center; border: 1px solid #eee;">
-                    <div>PICKING: <strong>${listWajib.length}</strong></div><div style="color: #3498db;">SAMPLING: <strong>${listDone.length}</strong></div><div style="color: #e74c3c;">SISA: <strong>${listSisa.length}</strong></div>
-                    ${!isDone ? `<button id="btn-${index}" class="btn-toggle" onclick="toggleDetail(${index})"><i class="fas fa-eye"></i> Detail Sisa</button>` : ''}</div>
-                    <div id="detail-${index}" class="detail-sisa"><div style="background: #fff5f5; padding: 10px; border-radius: 6px; border: 1px solid #feb2b2;"><span class="kon-list">${listSisa.join(', ')}</span></div></div></td></tr>`;
-            });
-            document.getElementById('wTotal').innerText = wTotal;
-            document.getElementById('wDone').innerText = wDone;
-            document.getElementById('wPending').innerText = wTotal - wDone;
+function renderTemuan() {
+    const perfMap = {}; 
+    const temuanMap = {};
+    
+    rawReports.forEach(r => {
+        const tgl = formatDateDisplay(r[9]) || "Unknown";
+        // Berdasarkan screenshot: Kolom K (Keterangan) adalah indeks [10]
+        const keterangan = (r[10] || "").toString().trim(); 
+
+        // 1. Kapasitas Sampling (Data untuk Sumbu Y)
+        if (!perfMap[tgl]) perfMap[tgl] = { toko: new Set(), kon: 0 };
+        perfMap[tgl].toko.add(r[3]); 
+        perfMap[tgl].kon++;
+
+        // 2. Temuan Selisih (Data untuk Line Chart)
+        if (!temuanMap[tgl]) temuanMap[tgl] = { toko: new Set(), kon: 0 };
+        if (keterangan.toLowerCase().includes("qty bermasalah")) { 
+            temuanMap[tgl].toko.add(r[3]); 
+            temuanMap[tgl].kon++; 
         }
+    });
 
-        function renderTemuan() {
-            const perfMap = {}; const temuanMap = {};
-            rawReports.forEach(r => {
-                const tgl = formatDateDisplay(r[9]) || "Unknown";
-                if (!perfMap[tgl]) perfMap[tgl] = { toko: new Set(), kon: 0 };
-                perfMap[tgl].toko.add(r[3]); perfMap[tgl].kon++;
-                if (!temuanMap[tgl]) temuanMap[tgl] = { toko: new Set(), kon: 0 };
-                if (parseInt(r[8]) !== 0) { temuanMap[tgl].toko.add(r[3]); temuanMap[tgl].kon++; }
+    const labels = Object.keys(perfMap).sort((a,b) => new Date(a) - new Date(b)).slice(-5);
+    const ctx = document.getElementById('chartTemuan').getContext('2d');
+    
+    if (myChart) myChart.destroy();
+    
+    // Plugin untuk memunculkan Label Persentase di atas titik (Sesuai Gambar Referensi)
+    const dataLabelsPlugin = {
+        id: 'dataLabelsPlugin',
+        afterDatasetsDraw(chart) {
+            const {ctx} = chart;
+            chart.data.datasets.forEach((dataset, i) => {
+                if (dataset.type === 'line') {
+                    const meta = chart.getDatasetMeta(i);
+                    meta.data.forEach((point, index) => {
+                        const total = dataset.label.includes('Toko') ? perfMap[labels[index]].toko.size : perfMap[labels[index]].kon;
+                        const val = dataset.data[index];
+                        const pct = total > 0 ? ((val / total) * 100).toFixed(1) + '%' : '0.0%';
+                        
+                        ctx.fillStyle = dataset.borderColor;
+                        ctx.font = 'bold 11px Segoe UI';
+                        ctx.textAlign = 'center';
+                        ctx.fillText(pct, point.x, point.y - 12);
+                    });
+                }
             });
-
-            const labels = Object.keys(perfMap).sort((a,b) => new Date(a) - new Date(b)).slice(-5);
-            const dataPersentase = labels.map(l => ((temuanMap[l].kon / perfMap[l].kon) * 100).toFixed(1));
-
-            const ctx = document.getElementById('chartTemuan').getContext('2d');
-            if (myChart) myChart.destroy();
-            myChart = new Chart(ctx, { 
-                type: 'bar', data: { labels: labels, datasets: [{ label: 'Sampling (Kon)', data: labels.map(l => perfMap[l].kon), backgroundColor: 'rgba(52, 152, 219, 0.8)', borderRadius: 5, yAxisID: 'y' }, { label: 'Selisih (Kon)', data: labels.map(l => temuanMap[l].kon), backgroundColor: 'rgba(231, 76, 60, 0.8)', borderRadius: 5, yAxisID: 'y' }, { label: '% Rasio', data: dataPersentase, type: 'line', borderColor: '#f39c12', borderWidth: 3, tension: 0.4, fill: false, yAxisID: 'y1' }] }, 
-                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top', labels: { usePointStyle: true, boxWidth: 6 } } }, scales: { y: { beginAtZero: true, grid: { display: false } }, y1: { beginAtZero: true, position: 'right', grid: { drawOnChartArea: false } } } } 
-            });
-
-            document.querySelector('#tableTemuan tbody').innerHTML = labels.slice().reverse().map(l => {
-                const pToko = ((temuanMap[l].toko.size / perfMap[l].toko.size) * 100).toFixed(1);
-                const pKon = ((temuanMap[l].kon / perfMap[l].kon) * 100).toFixed(1);
-                return `<tr><td><i class="fas fa-calendar-day" style="color:#94a3b8; margin-right:8px;"></i>${l}</td><td><div style="font-weight:bold;">${perfMap[l].toko.size} Toko</div><small>${perfMap[l].kon} Kon</small></td><td><div><span style="font-weight:bold; color:#e11d48;">${temuanMap[l].toko.size} Toko</span> <span class="pct-badge pct-selisih">${pToko}%</span></div><div style="font-size:0.75rem;">${temuanMap[l].kon} Kon <span style="color:#e11d48; font-weight:600;">(${pKon}%)</span></div></td></tr>`;
-            }).join('');
         }
+    };
+
+    myChart = new Chart(ctx, { 
+        plugins: [dataLabelsPlugin],
+        data: { 
+            labels: labels, 
+            datasets: [
+    // BAR: TOTAL SAMPLING (Dibuat Lebih Cerah/Solid)
+    { 
+        type: 'bar',
+        label: 'Sampling Toko', 
+        data: labels.map(l => perfMap[l].toko.size), 
+        backgroundColor: '#FF3131', // MERAH TERANG (Solid)
+        yAxisID: 'yToko',
+        order: 2,
+        barPercentage: 0.6
+    },
+    { 
+        type: 'bar',
+        label: 'Sampling Kon', 
+        data: labels.map(l => perfMap[l].kon), 
+        backgroundColor: '#FFDE59', // KUNING TERANG (Solid)
+        yAxisID: 'yKon',
+        order: 2,
+        barPercentage: 0.6
+    },
+    // LINE: JUMLAH SELISIH (Warna Abu-abu & Biru Abu-abu)
+    { 
+        type: 'line',
+        label: 'Selisih Toko', 
+        data: labels.map(l => temuanMap[l].toko.size), 
+        borderColor: '#424949', // ABU-ABU TUA
+        backgroundColor: '#424949',
+        borderWidth: 3,
+        tension: 0.3,
+        yAxisID: 'yToko',
+        fill: false,
+        pointRadius: 6,
+        order: 1
+    },
+    { 
+        type: 'line',
+        label: 'Selisih Kon', 
+        data: labels.map(l => temuanMap[l].kon), 
+        borderColor: '#5D6D7E', // BIRU ABU-ABU (Slate Blue)
+        backgroundColor: '#5D6D7E',
+        borderWidth: 3,
+        borderDash: [5, 2],
+        tension: 0.3,
+        yAxisID: 'yKon',
+        fill: false,
+        pointRadius: 5,
+        order: 1
+    }
+] 
+        }, 
+        options: { 
+            responsive: true, 
+            maintainAspectRatio: false, 
+            layout: { padding: { top: 25 } },
+            scales: { 
+                yToko: { 
+                    type: 'linear', position: 'left',
+                    title: { display: true, text: 'Jumlah Toko', color: '#FF0000', font: {weight:'bold'} },
+                    grid: { display: false },
+                    beginAtZero: true
+                },
+                yKon: { 
+                    type: 'linear', position: 'right',
+                    title: { display: true, text: 'Jumlah Kontainer', color: '#B8860B', font: {weight:'bold'} },
+                    grid: { drawOnChartArea: false },
+                    beginAtZero: true
+                }
+            },
+            plugins: {
+                legend: { position: 'top', labels: { usePointStyle: true, font: {weight:'bold'} } }
+            }
+        } 
+    });
+
+    // Panggil fungsi tabel (Nama disesuaikan menjadi renderTableTemuan)
+    renderTableTemuan(labels, perfMap, temuanMap);
+}
+
+function renderTableTemuan(labels, perfMap, temuanMap) {
+    const tbody = document.querySelector('#tableTemuan tbody');
+    tbody.innerHTML = labels.slice().reverse().map(l => {
+        const pToko = perfMap[l].toko.size > 0 ? ((temuanMap[l].toko.size / perfMap[l].toko.size) * 100).toFixed(1) : 0;
+        const pKon = perfMap[l].kon > 0 ? ((temuanMap[l].kon / perfMap[l].kon) * 100).toFixed(1) : 0;
+        return `<tr>
+            <td><b>${l}</b></td>
+            <td>Toko: ${perfMap[l].toko.size}<br><small>Kon: ${perfMap[l].kon}</small></td>
+            <td>
+                <span style="color:#FF0000; font-weight:bold;">${temuanMap[l].toko.size} Toko</span> <span class="badge badge-red">${pToko}%</span><br>
+                <span style="color:#B8860B; font-weight:bold;">${temuanMap[l].kon} Kon</span> <span class="badge" style="background:#fef3c7; color:#b45309;">${pKon}%</span>
+            </td>
+        </tr>`;
+    }).join('');
+}
 
         function renderPetugas(reports, selectedTgl) {
             const tbodySudah = document.querySelector('#tablePetugasSudah tbody');
@@ -381,6 +589,190 @@ function renderPerformanceAccumulated() {
                 btn.innerHTML = '<i class="fas fa-eye-slash"></i> Sembunyi';
             }
         }
+async function popExport(type) {
+    const start = prompt("Masukkan Tanggal Mulai (Contoh: 01-Jan-24):");
+    const end = prompt("Masukkan Tanggal Akhir (Contoh: 31-Dec-24):");
+    
+    if (!start || !end) return alert("Periode harus diisi!");
+    
+    if (type === 'temuan') {
+        await exportTemuanToExcel(start, end);
+    } else {
+        await exportProduktivitasToExcel(start, end);
+    }
+}
+
+async function exportTemuanToExcel(start, end) {
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Temuan Selisih');
+
+    // 1. Ambil Gambar Grafik
+    const canvas = document.getElementById('chartTemuan');
+    const imageBase64 = canvas.toDataURL('image/png');
+    const imageId = workbook.addImage({ base64: imageBase64, extension: 'png' });
+
+    sheet.addImage(imageId, {
+        tl: { col: 0, row: 1 },
+        ext: { width: 600, height: 300 }
+    });
+
+    // 2. Header Tabel (Mulai di baris 18 setelah gambar)
+    const headerRow = sheet.getRow(18);
+    headerRow.values = ['Tanggal', 'Sampling Toko', 'Sampling Kon', 'Selisih Toko', 'Selisih Kon'];
+    headerRow.font = { bold: true, color: { argb: 'FFFFFF' } };
+    headerRow.eachCell(cell => {
+        cell.fill = { type: 'pattern', pattern:'solid', fgColor:{argb:'2C3E50'} };
+    });
+
+    // 3. Masukkan Data Berdasarkan Periode
+    // (Logika filter data berdasarkan range tanggal start & end)
+    // ... logic data masukan di sini ...
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    saveAs(new Blob([buffer]), `Report_Temuan_${start}_${end}.xlsx`);
+}
+
+async function popExport(type) {
+    const start = prompt("Masukkan Tanggal Mulai (Format: DD-Mon-YY, contoh: 01-Jan-24):");
+    const end = prompt("Masukkan Tanggal Akhir (Format: DD-Mon-YY, contoh: 05-Jan-24):");
+    
+    if (!start || !end) return alert("Periode harus diisi!");
+    
+    if (type === 'temuan') {
+        await exportTemuanToExcel(start, end);
+    } else {
+        await exportProduktivitasToExcel(start, end);
+    }
+}
+
+// --- FUNGSI POPUP EXPORT ---
+async function popExport(type) {
+    if (type === 'temuan') {
+        // Report No 2: Minta periode karena ingin data lebih dari yang tampil di layar
+        const start = prompt("Masukkan Tanggal Mulai (Contoh: 01-Jan-26):");
+        const end = prompt("Masukkan Tanggal Akhir (Contoh: 10-Jan-26):");
+        if (!start || !end) return alert("Periode harus diisi!");
+        await exportTemuanToExcel(start, end);
+    } else {
+        // Report No 3: Langsung export data yang tampil di dashboard
+        await exportProduktivitasToExcel();
+    }
+}
+
+// --- EXPORT NO 2: TEMUAN SELISIH (BERDASARKAN PERIODE) ---
+async function exportTemuanToExcel(start, end) {
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Temuan Selisih');
+
+    // 1. Ambil Gambar Grafik yang sedang tampil
+    const canvas = document.getElementById('chartTemuan');
+    const imageBase64 = canvas.toDataURL('image/png');
+    const imageId = workbook.addImage({ base64: imageBase64, extension: 'png' });
+    sheet.addImage(imageId, 'A1:E15'); 
+
+    // 2. Header Tabel
+    const headerRow = sheet.getRow(17);
+    headerRow.values = ['Tanggal', 'Sampling Toko', 'Sampling Kon', 'Selisih Toko', 'Selisih Kon', '% Selisih Toko'];
+    headerRow.eachCell(c => {
+        c.fill = { type: 'pattern', pattern:'solid', fgColor:{argb:'2C3E50'} };
+        c.font = { color: { argb: 'FFFFFF' }, bold: true };
+    });
+
+    // 3. Proses Ulang Data rawReports agar sesuai Periode (Bukan cuma 5 hari)
+    const perfMap = {}; 
+    const temuanMap = {};
+    
+    rawReports.forEach(r => {
+        const tglStr = formatDateDisplay(r[9]);
+        // Filter range tanggal sederhana (String comparison atau Date comparison)
+        if (new Date(tglStr) >= new Date(start) && new Date(tglStr) <= new Date(end)) {
+            const keterangan = (r[10] || "").toString().trim(); 
+
+            if (!perfMap[tglStr]) perfMap[tglStr] = { toko: new Set(), kon: 0 };
+            perfMap[tglStr].toko.add(r[3]); 
+            perfMap[tglStr].kon++;
+
+            if (!temuanMap[tglStr]) temuanMap[tglStr] = { toko: new Set(), kon: 0 };
+            if (keterangan.toLowerCase().includes("qty bermasalah")) { 
+                temuanMap[tglStr].toko.add(r[3]); 
+                temuanMap[tglStr].kon++; 
+            }
+        }
+    });
+
+    const sortedDates = Object.keys(perfMap).sort((a,b) => new Date(a) - new Date(b));
+    let currentRow = 18;
+
+    sortedDates.forEach(tgl => {
+        const pct = perfMap[tgl].toko.size > 0 ? ((temuanMap[tgl].toko.size / perfMap[tgl].toko.size) * 100).toFixed(1) + '%' : '0%';
+        sheet.addRow([
+            tgl,
+            perfMap[tgl].toko.size,
+            perfMap[tgl].kon,
+            temuanMap[tgl].toko.size,
+            temuanMap[tgl].kon,
+            pct
+        ]);
+        
+        const row = sheet.getRow(currentRow);
+        row.getCell(4).font = { color: { argb: 'FF0000' }, bold: true }; // Merah untuk selisih
+        currentRow++;
+    });
+
+    sheet.getColumn(1).width = 15;
+    const buffer = await workbook.xlsx.writeBuffer();
+    saveAs(new Blob([buffer]), `Report_Temuan_${start}_to_${end}.xlsx`);
+}
+
+// --- EXPORT NO 3: PRODUKTIVITAS (LANGSUNG DASHBOARD) ---
+async function exportProduktivitasToExcel() {
+    const workbook = new ExcelJS.Workbook();
+    const selectedTgl = document.getElementById('globalFilterTgl').value;
+    
+    // SHEET 1: STATUS SAMPLING
+    const sheet1 = workbook.addWorksheet('Summary Petugas');
+    sheet1.addRow(['DATA SAMPLING TANGGAL: ' + selectedTgl]).font = {bold: true};
+    
+    // Tabel Sudah
+    sheet1.addRow(['SUDAH SAMPLING']).font = {bold: true};
+    const h1 = sheet1.addRow(['Nama Petugas', 'NIK', 'Shift', 'Toko', 'Total Kon']);
+    h1.eachCell(c => { c.fill = {type:'pattern', pattern:'solid', fgColor:{argb:'27AE60'}}; c.font = {color:{argb:'FFFFFF'}}; });
+    
+    document.querySelectorAll('#tablePetugasSudah tbody tr').forEach(tr => {
+        const c = tr.querySelectorAll('td');
+        sheet1.addRow([c[0].innerText.split('\n')[0], c[0].innerText.split('\n')[1].replace('NIK: ',''), c[1].innerText, c[2].innerText, c[3].innerText]);
+    });
+
+    sheet1.addRow([]);
+
+    // Tabel Belum
+    sheet1.addRow(['BELUM SAMPLING']).font = {bold: true};
+    const h2 = sheet1.addRow(['Nama Petugas', 'NIK', 'Shift', 'Status']);
+    h2.eachCell(c => { c.fill = {type:'pattern', pattern:'solid', fgColor:{argb:'E74C3C'}}; c.font = {color:{argb:'FFFFFF'}}; });
+
+    document.querySelectorAll('#tablePetugasBelum tbody tr').forEach(tr => {
+        const c = tr.querySelectorAll('td');
+        sheet1.addRow([c[0].innerText, c[1].innerText, c[2].innerText, c[3].innerText]);
+    });
+
+    // SHEET 2: PERFORMANCE ACCUMULATED
+    const sheet2 = workbook.addWorksheet('Performance Accumulated');
+    const h3 = sheet2.addRow(['Petugas', 'NIK', 'Tgl Terakhir', 'Toko', 'Freq', 'Total Kon']);
+    h3.eachCell(c => { c.fill = {type:'pattern', pattern:'solid', fgColor:{argb:'3498DB'}}; c.font = {color:{argb:'FFFFFF'}}; });
+
+    document.querySelectorAll('#tablePerformanceAcc tbody tr').forEach(tr => {
+        const c = tr.querySelectorAll('td');
+        sheet2.addRow([c[0].innerText.split('\n')[0], c[0].innerText.split('\n')[1].replace('NIK: ',''), c[1].innerText, c[2].innerText, c[3].innerText, c[4].innerText]);
+    });
+
+    sheet1.columns.forEach(col => col.width = 18);
+    sheet2.columns.forEach(col => col.width = 18);
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    saveAs(new Blob([buffer]), `Report_Produktivitas_${selectedTgl}.xlsx`);
+}
+
+
     </script>
 </body>
 </html>
